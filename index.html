@@ -354,7 +354,7 @@ let gameOver = false;
 let bestScore = parseInt(localStorage.getItem('best2048') || '0');
 document.getElementById('bestScoreDisplay').textContent = bestScore;
 
-let stats = { games: 0, wins: 0, scores: [], maxTiles: [] };
+let stats = { games: 0, wins: 0, scores: [], maxTiles: [], latency: [] };
 
 function newTile() {
   let empty = board.map((v, i) => v === 0 ? i : -1).filter(i => i >= 0);
@@ -390,7 +390,8 @@ function getScoreGain(rowBefore, rowAfter) {
   let bi = 0, ai = 0;
   while (bi < b.length && ai < a.length) {
     if (b[bi] !== a[ai]) {
-      gain += 1 << a[ai]; bi += 2; ai++;
+      gain += 1 << a[ai]; bi++; ai++;
+      if (bi < b.length && b[bi - 1] === b[bi]) bi++;
     } else { bi++; ai++; }
   }
   return gain;
@@ -611,6 +612,24 @@ function stopAI() {
   document.getElementById('btnAI').textContent = '🤖 AI Play';
 }
 
+// 触摸/点击滑动支持
+let touchStartX = 0, touchStartY = 0;
+canvas.addEventListener('touchstart', (e) => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, {passive: true});
+canvas.addEventListener('touchend', (e) => {
+  let dx = e.changedTouches[0].clientX - touchStartX;
+  let dy = e.changedTouches[0].clientY - touchStartY;
+  let absDx = Math.abs(dx), absDy = Math.abs(dy);
+  if (Math.max(absDx, absDy) < 20) return;
+  if (aiMode) { stopAI(); document.getElementById('statusBar').textContent = '👤 玩家模式'; }
+  if (absDx > absDy) {
+    move(dx > 0 ? 3 : 2);
+  } else {
+    move(dy > 0 ? 1 : 0);
+  }
+}, {passive: true});
 // ============ 5. 交互控制 ============
 document.getElementById('btnNewGame').addEventListener('click', () => { stopAI(); initBoard(); });
 document.getElementById('btnAI').addEventListener('click', () => { if (aiMode) stopAI(); else startAI(); });
@@ -637,7 +656,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === ' ') { e.preventDefault(); document.getElementById('btnAI').click(); }
 });
 
-window.addEventListener('load', () => { resizeCanvas(); initBoard(); document.getElementById('stableBar').textContent = '🎮 方向键/WASD 操作 · [Space] 切换 AI · [N] 新游戏'; });
+window.addEventListener('load', () => { resizeCanvas(); initBoard(); document.getElementById('statusBar').textContent = '🎮 方向键/WASD 操作 · [Space] 切换 AI · [N] 新游戏'; });
 window.addEventListener('resize', resizeCanvas);
 
 // ============ 启动 ============
