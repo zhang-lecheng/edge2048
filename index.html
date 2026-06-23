@@ -2,815 +2,442 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2048 RL Demo - Client Side</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2048 RL - Edge AI (Local 2-ply Expectimax)</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: #1a1a2e;
-  color: #e0e0e0;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  user-select: none;
+:root {
+    --bg: #1a1a2e;
+    --board-bg: #bbada0;
+    --grid-gap: 12px;
+    --cell-size: 85px;
+    /* 一次移动的像素步长 = 单元格 + 间距 */
+    --move-step: calc(var(--cell-size) + var(--grid-gap));
 }
-.container {
-  text-align: center;
-  padding: 20px;
-}
-h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin-bottom: 4px;
-  background: linear-gradient(135deg, #f7971e, #ffd200);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.subtitle {
-  color: #888;
-  font-size: 13px;
-  margin-bottom: 16px;
-  letter-spacing: 1px;
-}
-.subtitle span { color: #ffd200; -webkit-text-fill-color: #ffd200; background: none; }
-.game-wrapper {
-  display: flex;
-  gap: 30px;
-  align-items: flex-start;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-.board-section {
-  position: relative;
-}
-canvas#board {
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  display: block;
-  background: #bbada0;
-  max-width: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  touch-action: none;
-}
-.score-board {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-bottom: 12px;
-}
-.score-item {
-  background: #2d2d44;
-  padding: 8px 20px;
-  border-radius: 8px;
-  min-width: 90px;
-}
-.score-item .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
-.score-item .value { font-size: 22px; font-weight: 700; color: #fff; }
-.controls {
-  margin-top: 14px;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-.controls button, .controls .btn {
-  background: #2d2d44;
-  color: #e0e0e0;
-  border: 1px solid #444;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-.controls button:hover { background: #3d3d55; border-color: #f7971e; }
-.controls button:active { transform: scale(0.96); }
-.controls button.active { background: #f7971e; color: #1a1a2e; border-color: #f7971e; font-weight: 700; }
-.speed-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #2d2d44;
-  padding: 4px 12px;
-  border-radius: 6px;
-  border: 1px solid #444;
-}
-.speed-control label { font-size: 12px; color: #aaa; }
-.speed-control input[type=range] { width: 80px; accent-color: #f7971e; }
-.speed-control input[type=number] {
-  width: 50px; background: #1a1a2e; border: 1px solid #444;
-  color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 13px;
-}
-.status-bar {
-  margin-top: 14px;
-  font-size: 13px;
-  color: #888;
-  min-height: 20px;
-}
-.key-hint {
-  font-size: 11px;
-  color: #666;
-  margin-top: 6px;
-}
-.tip-panel {
-  background: #2d2d44;
-  border-radius: 10px;
-  padding: 16px 20px;
-  min-width: 200px;
-  text-align: left;
-  border: 1px solid #444;
-}
-.tip-panel h3 { font-size: 14px; color: #f7971e; margin-bottom: 8px; }
-.tip-panel p { font-size: 12px; color: #aaa; line-height: 1.6; margin-bottom: 4px; }
-.tip-panel .stat {
-  display: flex; justify-content: space-between; padding: 2px 0;
-  font-size: 13px; border-bottom: 1px solid #333;
-}
-.tip-panel .stat:last-child { border-bottom: none; }
-.tip-panel .stat .l { color: #888; }
-.tip-panel .stat .r { color: #ffd200; font-weight: 600; }
+* { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+body { background: var(--bg); color: #fff; font-family: 'Segoe UI', system-ui, sans-serif;
+       display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
+.container { text-align: center; width: 100%; max-width: 460px; padding: 10px; }
+h1 { font-size: 28px; font-weight: 800; margin-bottom: 5px;
+     background: linear-gradient(135deg, #f7971e, #ffd200);
+     -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-.loading-overlay {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background: #1a1a2e; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000;
+.score-board { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
+.score-box { background: #2d2d44; padding: 10px; border-radius: 8px; min-width: 100px; border: 1px solid #444; }
+.score-box label { display: block; font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 2px; }
+.score-box span { font-size: 20px; font-weight: 700; color: #ffd200; }
+
+/* 棋盘尺寸由 CSS 变量推导，保证响应式自洽 */
+#game-board {
+    width: calc(4 * var(--cell-size) + 5 * var(--grid-gap));
+    height: calc(4 * var(--cell-size) + 5 * var(--grid-gap));
+    background: var(--board-bg); border-radius: 10px;
+    position: relative; padding: var(--grid-gap); margin: 0 auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
 }
-.spinner { width: 48px; height: 48px; border: 6px solid #333; border-top-color: #f7971e; border-radius: 50%; animation: spin 1s linear infinite; }
+.grid-bg-cell {
+    width: var(--cell-size); height: var(--cell-size);
+    background: rgba(238, 228, 218, 0.35); border-radius: 6px;
+    position: absolute; /* left/top 在 JS 里按公式设置 */
+}
+
+/*
+  关键修复：
+  - .tile 用 left/top 锁定基准偏移（等于 padding/grid-gap），再用 translate 平移到格子。
+    这样绝对定位的原点与背景格完全对齐，不再“贴在左上角”。
+  - 位移动画只作用在 .tile 的 transform 上；缩放(出现/合并弹跳)动画作用在内层 .tile-inner，
+    避免 keyframes 的 transform 覆盖 translate 导致新方块又跳回左上角。
+*/
+.tile {
+    width: var(--cell-size); height: var(--cell-size); border-radius: 6px;
+    position: absolute; left: var(--grid-gap); top: var(--grid-gap);
+    z-index: 10; pointer-events: none;
+    transition: transform 120ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tile-inner {
+    width: 100%; height: 100%; border-radius: 6px;
+    display: flex; justify-content: center; align-items: center;
+    font-weight: 700; font-size: 32px;
+    transform-origin: center center;
+}
+
+/* 磁贴颜色系统 (按 log2 值) */
+.v1 .tile-inner { background: #eee4da; color: #776e65; }
+.v2 .tile-inner { background: #ede0c8; color: #776e65; }
+.v3 .tile-inner { background: #f2b179; color: #f9f6f2; }
+.v4 .tile-inner { background: #f59563; color: #f9f6f2; }
+.v5 .tile-inner { background: #f67c5f; color: #f9f6f2; }
+.v6 .tile-inner { background: #f65e3b; color: #f9f6f2; }
+.v7 .tile-inner { background: #edcf72; color: #f9f6f2; }
+.v8 .tile-inner { background: #edcc61; color: #f9f6f2; }
+.v9 .tile-inner { background: #edc850; color: #f9f6f2; }
+.v10 .tile-inner { background: #edc53f; color: #f9f6f2; }
+.v11 .tile-inner { background: #edc22e; color: #f9f6f2; box-shadow: 0 0 15px #edc22e; }
+.v-huge .tile-inner { background: #3c3a32; color: #f9f6f2; font-size: 24px; }
+
+/* 动画只改 scale，不再干扰外层 translate */
+.appear { animation: appear 150ms ease-out; }
+.pop { animation: pop 180ms ease-in-out; }
+@keyframes appear { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+.controls { margin-top: 20px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+button { background: #2d2d44; color: #fff; border: 1px solid #555; padding: 10px 20px;
+         border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: 0.2s; }
+button:hover { border-color: #f7971e; }
+button.active { background: #f7971e; color: #1a1a2e; border-color: #f7971e; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.loading-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 1000;
+                   display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.loader { width: 50px; height: 50px; border: 5px solid #2d2d44;
+          border-top-color: #f7971e; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-overlay h2 { margin-top: 20px; color: #f7971e; }
-.loading-overlay p { margin-top: 10px; color: #888; font-size: 14px; }
+
+@media (max-width: 460px) {
+    :root { --cell-size: 64px; --grid-gap: 8px; }
+    h1 { font-size: 22px; }
+    .tile-inner { font-size: 26px; }
+}
+@media (max-width: 340px) {
+    :root { --cell-size: 56px; --grid-gap: 7px; }
+    .tile-inner { font-size: 22px; }
+}
 </style>
 </head>
 <body>
 
-<div id="loadingPanel" class="loading-overlay">
-  <div class="spinner"></div>
-  <h2>Initializing Edge AI</h2>
-  <p id="loadText">Loading 13.5 MB weights to browser...</p>
+<div id="loader" class="loading-overlay">
+    <div class="loader"></div>
+    <p style="margin-top:20px; color:#888; letter-spacing: 1px;">INITIALIZING CLIENT-SIDE AI...</p>
+    <p id="load-status" style="font-size:12px; color:#555; margin-top:5px">Downloading Weights (13.5MB)</p>
 </div>
 
 <div class="container">
-  <h1>2048 · RL · EDGE AI</h1>
-  <div class="subtitle">Client-Side Compute · <span>100% Local</span></div>
+    <h1>2048 RL · EDGE</h1>
+    <div class="score-board">
+        <div class="score-box"><label>Score</label><span id="curr-score">0</span></div>
+        <div class="score-box"><label>Best</label><span id="best-score">0</span></div>
+    </div>
 
-  <div class="score-board">
-    <div class="score-item"><div class="label">Score</div><div class="value" id="scoreDisplay">0</div></div>
-    <div class="score-item"><div class="label">Best</div><div class="value" id="bestScoreDisplay">0</div></div>
-    <div class="score-item"><div class="label">Max Tile</div><div class="value" id="maxTileDisplay">-</div></div>
-  </div>
+    <div id="game-board"></div>
 
-  <div class="game-wrapper">
-    <div class="board-section">
-      <canvas id="board" width="400" height="400"></canvas>
-      <div class="controls">
-        <button id="btnNewGame">🔄 New Game</button>
-        <button id="btnAI">🤖 AI Play</button>
-        <div class="speed-control">
-          <label>Speed</label>
-          <input type="range" id="speedRange" min="1" max="20" value="1" step="1">
-          <input type="number" id="speedInput" value="1" min="0.1" max="99" step="0.5">
-          <span style="font-size:12px;color:#888">步/秒</span>
+    <div class="controls">
+        <button onclick="newGame()">New Game</button>
+        <button id="ai-btn" onclick="toggleAI()" disabled>AI Loop</button>
+        <div style="background:#2d2d44; padding:8px 12px; border-radius:6px; border:1px solid #555; display:flex; align-items:center; gap:8px">
+            <span style="font-size:10px; color:#888">SPEED</span>
+            <input type="range" id="speed" min="1" max="60" value="15">
         </div>
-      </div>
-      <div class="key-hint">方向键 / WASD 操作 · AI 模式下可随时按方向键夺回控制</div>
-      <div class="status-bar" id="statusBar">等待 AI 初始化...</div>
     </div>
-
-    <div class="tip-panel" id="statsPanel">
-      <h3>📊 Session Stats</h3>
-      <div class="stat"><span class="l">Games Played</span><span class="r" id="statGames">0</span></div>
-      <div class="stat"><span class="l">Win Rate</span><span class="r" id="statWR">-</span></div>
-      <div class="stat"><span class="l">Avg Score</span><span class="r" id="statAvg">-</span></div>
-      <div class="stat"><span class="l">Best Score</span><span class="r" id="statBest">0</span></div>
-      <div class="stat"><span class="l">Highest Tile</span><span class="r" id="statMaxTile">-</span></div>
-    </div>
-  </div>
+    <p id="info" style="margin-top:15px; font-size:12px; color:#666">本地浏览器 · 8-fold 对称 + 2-ply Expectimax</p>
 </div>
 
 <script>
-// ============ 1. AI 初始化与核心逻辑 ============
-let patterns = null, tables = null, config = null, symIndices = null;
-let aiReady = false;
+// ============ 1. AI 推理引擎 (纯本地) ============
+// 板面约定：grid[index], index = row*4 + col (row=0 顶部, col=0 左侧)，与训练端 game.py 完全一致。
+let patterns = [], tables = null, config = null, symIndices = [];
+let modelReady = false;
 
-async function initAI() {
-  const loadText = document.getElementById('loadText');
-  try {
-    loadText.textContent = 'Downloading model configuration...';
-    const [pRes, cRes] = await Promise.all([fetch('web_model/patterns.json'), fetch('web_model/config.json')]);
-    patterns = await pRes.json();
-    config = await cRes.json();
+async function loadModel() {
+    try {
+        const [p, c, t] = await Promise.all([
+            fetch('web_model/patterns.json').then(r=>r.json()),
+            fetch('web_model/config.json').then(r=>r.json()),
+            fetch('web_model/tables.bin').then(r=>r.arrayBuffer())
+        ]);
+        patterns = p; config = c; tables = new Float32Array(t);
 
-    loadText.textContent = 'Downloading 13.5MB weight table...';
-    const tRes = await fetch('web_model/tables.bin');
-    const ab = await tRes.arrayBuffer();
-    tables = new Float32Array(ab);
-
-    loadText.textContent = 'Compiling symmetry transforms...';
-    symIndices = [];
-    for (let pi = 0; pi < patterns.length; pi++) {
-      const pat = patterns[pi];
-      const syms = [];
-      // 8 重对称：4 旋转 x 2 翻转
-      for (let flip = 0; flip <= 1; flip++) {
-        for (let rot = 0; rot < 4; rot++) {
-          const cur = [];
-          for (let j = 0; j < pat.length; j++) {
-            let r = pat[j][0], c = pat[j][1];
-            if (flip) c = 3 - c;
-            for (let k = 0; k < rot; k++) { const tmp = c; c = 3 - r; r = tmp; }
-            cur.push(r * 4 + c);
-          }
-          syms.push(cur);
-        }
-      }
-      symIndices.push(syms);
-    }
-
-    document.getElementById('loadingPanel').style.display = 'none';
-    aiReady = true;
-    console.log('AI Ready:', patterns.length, 'patterns,', tables.length, 'weights');
-    document.getElementById('statusBar').textContent = '🎮 方向键/WASD 操作 · [Space] 切换 AI · [N] 新游戏';
-  } catch (e) {
-    loadText.textContent = 'Failed to load: ' + e.message;
-    console.error(e);
-  }
-}
-
-// 8-fold 对称的价值评估函数
-function getValue(bf) {
-  let total = 0;
-  for (let pi = 0; pi < patterns.length; pi++) {
-    const off = config.offsets[pi];
-    for (let si = 0; si < 8; si++) {
-      let idx = 0;
-      const posList = symIndices[pi][si];
-      for (let p = 0; p < posList.length; p++) {
-        let v = bf[posList[p]];
-        if (v >= 17) v = 16;
-        idx = idx * 17 + v;
-      }
-      total += tables[off + idx];
-    }
-  }
-  return total / (patterns.length * 8);
-}
-
-// 简化的滑动合并（仅用于 AI 搜索）
-function slideAndMerge(row) {
-  const t = row.filter(v => v !== 0);
-  const r = [];
-  for (let i = 0; i < t.length; i++) {
-    if (i + 1 < t.length && t[i] === t[i + 1]) {
-      r.push(t[i] + 1);
-      i++;
-    } else {
-      r.push(t[i]);
-    }
-  }
-  while (r.length < 4) r.push(0);
-  return r;
-}
-
-function applyActionForSearch(bf, a) {
-  const nb = bf.slice();
-  let moved = false;
-  for (let i = 0; i < 4; i++) {
-    let idx;
-    if (a === 0) idx = [i, i + 4, i + 8, i + 12];          // up
-    else if (a === 1) idx = [i + 12, i + 8, i + 4, i];    // down
-    else if (a === 2) idx = [i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 3]; // left
-    else idx = [i * 4 + 3, i * 4 + 2, i * 4 + 1, i * 4];  // right
-    const row = idx.map(j => bf[j]);
-    const nr = slideAndMerge(row);
-    for (let j = 0; j < 4; j++) {
-      if (bf[idx[j]] !== nr[j]) moved = true;
-      nb[idx[j]] = nr[j];
-    }
-  }
-  return { nb, moved };
-}
-
-function bestResp(bf) {
-  let bv = -1e9;
-  for (let a = 0; a < 4; a++) {
-    const { nb, moved } = applyActionForSearch(bf, a);
-    if (moved) {
-      const v = getValue(nb);
-      if (v > bv) bv = v;
-    }
-  }
-  return bv > -1e8 ? bv : -1e8;
-}
-
-function selectMove(bf, samps) {
-  let ba = 0, bv = -1e9;
-  for (let a = 0; a < 4; a++) {
-    const { nb, moved } = applyActionForSearch(bf, a);
-    if (!moved) continue;
-    const empty = [];
-    for (let i = 0; i < 16; i++) if (nb[i] === 0) empty.push(i);
-    let score = 0;
-    if (empty.length === 0) {
-      score = getValue(nb);
-    } else {
-      const ns = Math.min(empty.length, samps);
-      const step = Math.floor(empty.length / ns);
-      for (let i = 0; i < ns; i++) {
-        const pos = empty[(i * step) % empty.length];
-        nb[pos] = 1; const v2 = bestResp(nb);
-        nb[pos] = 2; const v4 = bestResp(nb);
-        nb[pos] = 0;
-        score += 0.9 * v2 + 0.1 * v4;
-      }
-      score /= ns;
-    }
-    if (score > bv) { bv = score; ba = a; }
-  }
-  return ba;
-}
-
-// ============ 2. 游戏引擎 (完全对齐 5000 端口) ============
-const SIZE = 4;
-const TILE_COLORS = {
-  0: {bg:'#cdc1b4', fg:'#776e65'},
-  1: {bg:'#eee4da', fg:'#776e65'},
-  2: {bg:'#ede0c8', fg:'#776e65'},
-  3: {bg:'#f2b179', fg:'#f9f6f2'},
-  4: {bg:'#f59563', fg:'#f9f6f2'},
-  5: {bg:'#f67c5f', fg:'#f9f6f2'},
-  6: {bg:'#f65e3b', fg:'#f9f6f2'},
-  7: {bg:'#edcf72', fg:'#f9f6f2'},
-  8: {bg:'#edcc61', fg:'#f9f6f2'},
-  9: {bg:'#edc850', fg:'#f9f6f2'},
-  10:{bg:'#edc53f', fg:'#f9f6f2'},
-  11:{bg:'#3c3a32', fg:'#f9f6f2'},
-};
-
-let board = Array(16).fill(0);
-let score = 0;
-let gameOver = false;
-let bestScore = parseInt(localStorage.getItem('best2048') || '0');
-document.getElementById('bestScoreDisplay').textContent = bestScore;
-
-let stats = { games: 0, wins: 0, scores: [], maxTiles: [], latency: [] };
-
-function newTile() {
-  let empty = board.map((v, i) => v === 0 ? i : -1).filter(i => i >= 0);
-  if (!empty.length) return;
-  let i = empty[Math.floor(Math.random() * empty.length)];
-  board[i] = Math.random() < 0.9 ? 1 : 2;
-}
-
-function initBoard() {
-  board.fill(0);
-  score = 0; gameOver = false;
-  newTile(); newTile();
-  render();
-  updateScore();
-}
-
-function slideRow(row) {
-  let t = row.filter(v => v !== 0);
-  let r = [];
-  for (let i = 0; i < t.length; i++) {
-    if (i + 1 < t.length && t[i] === t[i + 1]) {
-      r.push(t[i] + 1); i++;
-    } else r.push(t[i]);
-  }
-  while (r.length < 4) r.push(0);
-  return r;
-}
-
-function getScoreGain(rowBefore, rowAfter) {
-  let b = rowBefore.filter(v => v !== 0);
-  let a = rowAfter.filter(v => v !== 0);
-  let gain = 0;
-  let bi = 0, ai = 0;
-  while (bi < b.length && ai < a.length) {
-    if (b[bi] !== a[ai]) {
-      gain += 1 << a[ai]; bi++; ai++;
-      if (bi < b.length && b[bi - 1] === b[bi]) bi++;
-    } else { bi++; ai++; }
-  }
-  return gain;
-}
-
-
-// ============ 滑动动画系统 ============
-let animating = false;
-let animTiles = [];  // [{sx, sy, ex, ey, val, merged: bool}]
-const ANIM_DURATION = 100;
-let animStart = 0;
-
-function move(action) {
-  if (gameOver) return false;
-  
-  // 计算每一步后的 board 状态（但不更新）
-  let tempBoard = board.slice();
-  let moved = false;
-  let tilePaths = []; // [{sx,sy,ex,ey,val}]
-  
-  for (let i = 0; i < 4; i++) {
-    let idx;
-    if (action === 0) idx = [i, i + 4, i + 8, i + 12];
-    else if (action === 1) idx = [i + 12, i + 8, i + 4, i];
-    else if (action === 2) idx = [i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 3];
-    else idx = [i * 4 + 3, i * 4 + 2, i * 4 + 1, i * 4];
-    
-    let row = idx.map(j => tempBoard[j]);
-    let newRow = slideRow(row);
-    let gain = getScoreGain(row, newRow);
-    score += gain;
-    
-    // 收集路径
-    let nonZeroVals = row.filter(v => v !== 0);
-    let targetIndex = 0;
-    for (let j = 0; j < idx.length; j++) {
-      let origVal = tempBoard[idx[j]];
-      let newVal = newRow[j];
-      if (origVal !== newVal) moved = true;
-      
-      if (newVal !== 0) {
-        // 找到对应的原始位置
-        let srcRow = Math.floor(idx[j] / 4), srcCol = idx[j] % 4;
-        // 如果是合并，前一个位置
-        let srcIdx = idx[j];
-        if (j > 0 && newRow[j] === newRow[j-1]) {
-          srcIdx = idx[j-1];
-        } else if (nonZeroVals.length > targetIndex) {
-          // 找到非零值的来源
-          let found = false;
-          for (let k = 0; k < idx.length; k++) {
-            if (tempBoard[idx[k]] === newVal - 1 || tempBoard[idx[k]] === newVal) {
-              if (!tilePaths.some(t => t.ex === Math.floor(idx[k] / 4) && t.ey === idx[k] % 4)) {
-                srcIdx = idx[k];
-                found = true;
-                break;
-              }
+        // 预计算每个 pattern 的 8 个对称索引（4 旋转 × 2 翻转）。
+        // 由于对所有 8 个 D4 群元素求和，最终值与训练端 v8(8-fold) 数值一致。
+        const flipList = [false, true];
+        for (let pi = 0; pi < patterns.length; pi++) {
+            let syms = [];
+            for (let flip of flipList) {
+                for (let rot = 0; rot < 4; rot++) {
+                    let cur = [];
+                    for (let [r, c] of patterns[pi]) {
+                        let tr = r, tc = c;
+                        if (flip) tc = 3 - c;            // 水平翻转
+                        for (let i = 0; i < rot; i++) {  // 逆时针旋转 rot 次
+                            let tmp = tc;
+                            tc = 3 - tr;
+                            tr = tmp;
+                        }
+                        cur.push(tr * 4 + tc);
+                    }
+                    syms.push(cur);
+                }
             }
-          }
+            symIndices.push(syms);
         }
-        
-        let isMerged = false;
-        if (j > 0 && newRow[j] === newRow[j-1]) isMerged = true;
-        targetIndex++;
-        
-        tilePaths.push({
-          sx: Math.floor(srcIdx / 4),
-          sy: srcIdx % 4,
-          ex: Math.floor(idx[j] / 4),
-          ey: idx[j] % 4,
-          val: newVal,
-          merged: isMerged
-        });
-      }
-      
-      tempBoard[idx[j]] = newVal;
+        modelReady = true;
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('ai-btn').disabled = false;
+    } catch (e) {
+        document.getElementById('load-status').textContent = "ERROR: " + e.message;
     }
-  }
-  
-  if (!moved) return false;
-  
-  // 启动动画
-  animTiles = tilePaths;
-  animating = true;
-  animStart = performance.now();
-  board = tempBoard;
-  requestAnimationFrame(render);
-  
-  // 动画完成后执行
-  setTimeout(() => {
-    if (animating) {
-      // 直接跳到结果
-      animating = false;
-      newTile();
-      render();
-      updateScore();
-      checkGameOver();
-    }
-  }, ANIM_DURATION + 50);
-  
-  return true;
 }
 
-function checkGameOver() {
-  if (board.some(v => v === 0)) return false;
-  for (let action = 0; action < 4; action++) {
-    let test = [...board];
-    let moved = false;
+// 8-fold 对称估值，等于训练端 v8(board)。
+function getBoardValue(b) {
+    let t = 0;
+    for (let pi = 0; pi < patterns.length; pi++) {
+        let off = config.offsets[pi];
+        for (let si = 0; si < 8; si++) {
+            let idx = 0;
+            for (let p of symIndices[pi][si]) {
+                let v = b[p];
+                if (v >= 17) v = 16;
+                idx = idx * 17 + v;
+            }
+            t += tables[off + idx];
+        }
+    }
+    return t / (patterns.length * 8);
+}
+
+// 模拟一次移动（afterstate，不含随机方块）。返回 {nb, moved}。与 game.py / eval_final.apply_a 一致。
+function simulate(b, a) {
+    let nb = b.slice(), moved = false;
     for (let i = 0; i < 4; i++) {
-      let idx;
-      if (action === 0) idx = [i, i + 4, i + 8, i + 12];
-      else if (action === 1) idx = [i + 12, i + 8, i + 4, i];
-      else if (action === 2) idx = [i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 3];
-      else idx = [i * 4 + 3, i * 4 + 2, i * 4 + 1, i * 4];
-      let row = idx.map(j => test[j]);
-      let newRow = slideRow(row);
-      for (let j = 0; j < 4; j++) {
-        if (test[idx[j]] !== newRow[j]) moved = true;
-        test[idx[j]] = newRow[j];
-      }
+        let idx = (a === 0) ? [i, i + 4, i + 8, i + 12]      // UP   : 列 i，向顶压缩
+            : (a === 1) ? [i + 12, i + 8, i + 4, i]          // DOWN : 列 i，向底压缩
+            : (a === 2) ? [i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 3] // LEFT: 行 i，向左压缩
+            : [i * 4 + 3, i * 4 + 2, i * 4 + 1, i * 4];     // RIGHT: 行 i，向右压缩
+        let r = idx.map(j => b[j]).filter(v => v !== 0), res = [];
+        for (let j = 0; j < r.length; j++) {
+            if (j + 1 < r.length && r[j] === r[j + 1]) { res.push(r[j] + 1); j++; }
+            else res.push(r[j]);
+        }
+        while (res.length < 4) res.push(0);
+        for (let j = 0; j < 4; j++) { if (b[idx[j]] !== res[j]) moved = true; nb[idx[j]] = res[j]; }
     }
-    if (moved) return false;
-  }
-  gameOver = true;
-  document.getElementById('statusBar').textContent = '💀 Game Over!';
-  recordGame();
-  return true;
+    return { nb, moved };
 }
 
-function getMaxTile() {
-  let max = 0;
-  for (let v of board) if (v > max) max = v;
-  return max;
+// 对手最优响应（下一手玩家最优 afterstate 估值）。无合法步返回 -1e8（参考 eval_final.best_resp）。
+function bestResp(b) {
+    let bv = -1e9, any = false;
+    for (let a = 0; a < 4; a++) {
+        let { nb, moved } = simulate(b, a);
+        if (!moved) continue;
+        any = true;
+        let v = getBoardValue(nb);
+        if (v > bv) bv = v;
+    }
+    return any ? bv : -1e8;
 }
 
-function recordGame() {
-  let mt = getMaxTile();
-  stats.games++;
-  stats.scores.push(score);
-  stats.maxTiles.push(mt);
-  if (mt >= 11) stats.wins++;
-  if (score > bestScore) { bestScore = score; localStorage.setItem('best2048', bestScore); document.getElementById('bestScoreDisplay').textContent = bestScore; }
-  updateStatsPanel();
+// 2-ply Expectimax：玩家手 -> 随机方块 -> 玩家最优手 -> 估值。采样 samps 个空位以提速。
+// 与 eval_final.select_2ply 数值一致，复现训练模型的胜率策略。
+function aiSelectAction(b, samps = 4) {
+    let ba = -1, bv = -1e9, anyMove = false;
+    for (let a = 0; a < 4; a++) {
+        let { nb: s, moved } = simulate(b, a);
+        if (!moved) continue;
+        anyMove = true;
+        let ea = [];
+        for (let i = 0; i < 16; i++) if (s[i] === 0) ea.push(i);
+        let v;
+        if (ea.length === 0) {
+            v = getBoardValue(s);
+        } else {
+            let ns = Math.min(ea.length, samps);
+            let ev = 0;
+            for (let si = 0; si < ns; si++) {
+                let pos = ea[si % ea.length];
+                s[pos] = 1; let v2 = bestResp(s); // 出 2 (val=1, p=0.9)
+                s[pos] = 2; let v4 = bestResp(s); // 出 4 (val=2, p=0.1)
+                s[pos] = 0;
+                ev += 0.9 * v2 + 0.1 * v4;
+            }
+            v = ev / ns;
+        }
+        if (v > bv) { bv = v; ba = a; }
+    }
+    return anyMove ? ba : -1;
 }
 
-function updateScore() {
-  document.getElementById('scoreDisplay').textContent = score;
-  document.getElementById('bestScoreDisplay').textContent = bestScore;
-  let mt = getMaxTile();
-  document.getElementById('maxTileDisplay').textContent = mt === 0 ? '-' : (1 << mt);
+// ============ 2. 游戏核心与动画 ============
+let grid = Array(16).fill(0), score = 0, best = parseInt(localStorage.getItem('b2048') || '0');
+let isAnimating = false, aiActive = false;
+const INFO_DEFAULT = "本地浏览器 · 8-fold 对称 + 2-ply Expectimax";
+
+const boardDom = document.getElementById('game-board');
+let tileNodes = []; // [{id, x, y, val, dom}]
+
+// x=列(横向), y=行(纵向)，与 train 端 row*4+col 一致。
+function createTile(x, y, val, anim) {
+    const dom = document.createElement('div');
+    const inner = document.createElement('div');
+    inner.className = 'tile-inner';
+    inner.textContent = 1 << val;
+    if (anim) inner.classList.add(anim);
+    dom.appendChild(inner);
+    dom.className = 'tile v' + (val > 11 ? '-huge' : val);
+    dom.style.transform = `translate(calc(${x} * var(--move-step)), calc(${y} * var(--move-step)))`;
+    boardDom.appendChild(dom);
+    return { id: Math.random().toString(36).slice(2), x, y, val, dom };
 }
 
-function updateStatsPanel() {
-  document.getElementById('statGames').textContent = stats.games;
-  document.getElementById('statWR').textContent = stats.games > 0 ? (stats.wins / stats.games * 100).toFixed(1) + '%' : '-';
-  document.getElementById('statAvg').textContent = stats.scores.length > 0 ? Math.round(stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length) : '-';
-  document.getElementById('statBest').textContent = Math.max(...stats.scores, 0);
-  let maxT = Math.max(...stats.maxTiles, 0);
-  document.getElementById('statMaxTile').textContent = maxT > 0 ? (1 << maxT) : '-';
+function updateBoard() {
+    document.getElementById('curr-score').textContent = score;
+    document.getElementById('best-score').textContent = best;
 }
 
-// ============ 3. Canvas 渲染 ============
-const canvas = document.getElementById('board');
-const ctx = canvas.getContext('2d');
+function newGame() {
+    isAnimating = false;            // 修复：重置动画锁
+    aiActive = false;               // 修复：停止 AI 循环
+    document.getElementById('ai-btn').classList.remove('active');
+    document.getElementById('info').textContent = INFO_DEFAULT;
 
-function getCanvasSize() {
-  let vw = Math.min(window.innerWidth - 40, 440);
-  return Math.min(vw, 400);
-}
-
-function resizeCanvas() {
-  let size = getCanvasSize();
-  canvas.width = size;
-  canvas.height = size;
-  render();
-}
-
-const CELL = 90, GAP = 12, RADIUS = 6;
-
-function render(time) {
-  // 如果正在动画，优先渲染动画帧
-  if (animating && time && animStart > 0) {
-    let progress = Math.min((time - animStart) / ANIM_DURATION, 1);
-    let ease = progress; // 线性插值
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#bbada0';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    let W = canvas.width;
-    let scale = W / (CELL * 4 + GAP * 5);
-    let cell = CELL * scale;
-    let gap = GAP * scale;
-    let off = gap;
-    let radius = RADIUS * scale;
-
-    // 先画背景格子
+    boardDom.innerHTML = '';
     for (let i = 0; i < 16; i++) {
-      let r = Math.floor(i / 4), c = i % 4;
-      let x = off + c * (cell + gap), y = off + r * (cell + gap);
-      ctx.shadowColor = 'rgba(0,0,0,0.15)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetY = 2;
-      ctx.beginPath();
-      ctx.roundRect(x, y, cell, cell, radius);
-      ctx.fillStyle = '#cdc1b4';
-      ctx.fill();
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
+        const c = document.createElement('div');
+        c.className = 'grid-bg-cell';
+        c.style.left = `calc(${i % 4} * var(--move-step) + var(--grid-gap))`;
+        c.style.top = `calc(${Math.floor(i / 4)} * var(--move-step) + var(--grid-gap))`;
+        boardDom.appendChild(c);
+    }
+    grid.fill(0); tileNodes = []; score = 0;
+    spawn(); spawn(); updateBoard();
+}
+
+function spawn() {
+    let empty = [];
+    grid.forEach((v, i) => { if (v === 0) empty.push(i); });
+    if (!empty.length) return;
+    let idx = empty[Math.floor(Math.random() * empty.length)];
+    let v = Math.random() < 0.9 ? 1 : 2;
+    grid[idx] = v;
+    let t = createTile(idx % 4, Math.floor(idx / 4), v, 'appear');
+    t.dom.style.zIndex = 15; // 新方块在最上层，确保可见
+    tileNodes.push(t);
+}
+
+// 方向   a: 0=Up 1=Down 2=Left 3=Right（与训练/模拟一致）。
+function move(a) {
+    if (isAnimating) return;     // 动画锁，防止重叠移动
+    let moved = false;
+    let nextGrid = Array(16).fill(0);
+    let nextNodes = [];
+    let pendingRemove = [];
+
+    for (let i = 0; i < 4; i++) {
+        let idx = (a === 0) ? [i, i + 4, i + 8, i + 12]
+            : (a === 1) ? [i + 12, i + 8, i + 4, i]
+            : (a === 2) ? [i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 3]
+            : [i * 4 + 3, i * 4 + 2, i * 4 + 1, i * 4];
+
+        // 该“线”上的方块（按移动方向顺序），用 flat index 匹配 (row*4+col = y*4+x)。
+        let line = idx.map(p => tileNodes.find(t => t.x === p % 4 && t.y === Math.floor(p / 4)));
+        let active = line.filter(t => t);
+
+        let targetSlot = 0;
+        for (let j = 0; j < active.length; j++) {
+            let t = active[j];
+            let targetPos = idx[targetSlot];
+            let tx = targetPos % 4, ty = Math.floor(targetPos / 4);
+
+            if (j + 1 < active.length && t.val === active[j + 1].val) {
+                // 合并：两块都滑到目标格，随后销毁，并生成新合并块（出现后弹出）。
+                let nextT = active[j + 1];
+                t.dom.style.zIndex = 10;
+                nextT.dom.style.zIndex = 10;
+                t.dom.style.transform = `translate(calc(${tx} * var(--move-step)), calc(${ty} * var(--move-step)))`;
+                nextT.dom.style.transform = `translate(calc(${tx} * var(--move-step)), calc(${ty} * var(--move-step)))`;
+                pendingRemove.push(t, nextT);
+
+                let newVal = t.val + 1;
+                score += (1 << newVal);  // 经典 2048 计分：合并得 2^(newVal)，与 game.py 一致
+
+                let combined = createTile(tx, ty, newVal, 'pop');
+                combined.dom.style.zIndex = 20;     // 合并块在最上层
+                combined.dom.style.display = 'none'; // 等待滑动结束后再显示并弹出
+                nextNodes.push(combined);
+                nextGrid[targetPos] = newVal;
+                moved = true;
+                j++; // 合并消耗两个方块
+            } else {
+                if (t.x !== tx || t.y !== ty) {
+                    moved = true;
+                    t.dom.style.transform = `translate(calc(${tx} * var(--move-step)), calc(${ty} * var(--move-step)))`;
+                }
+                t.x = tx; t.y = ty;
+                nextNodes.push(t);
+                nextGrid[targetPos] = t.val;
+            }
+            targetSlot++;
+        }
     }
 
-    // 绘制动画中的方块
-    for (let t of animTiles) {
-      let curX = off + (t.sx * (1 - ease) + t.ex * ease) * (cell + gap);
-      let curY = off + (t.sy * (1 - ease) + t.ey * ease) * (cell + gap);
-      
-      let s = 1;
-      if (t.merged) s = 1 + 0.15 * Math.sin(progress * Math.PI);
-      
-      ctx.save();
-      ctx.translate(curX + cell / 2, curY + cell / 2);
-      ctx.scale(s, s);
-      let col = TILE_COLORS[t.val] || TILE_COLORS[11];
-      ctx.beginPath();
-      ctx.roundRect(-cell / 2, -cell / 2, cell, cell, radius);
-      ctx.fillStyle = col.bg;
-      ctx.fill();
-      ctx.fillStyle = col.fg;
-      let text = '' + (1 << t.val);
-      let fs = text.length >= 5 ? Math.floor(22 * scale) : text.length >= 4 ? Math.floor(26 * scale) : Math.floor(32 * scale);
-      if (fs < 12) fs = 12;
-      ctx.font = `bold ${fs}px 'Segoe UI', sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(text, 0, 2 * scale);
-      ctx.restore();
+    if (moved) {
+        isAnimating = true;
+        grid = nextGrid;
+        tileNodes = nextNodes;
+        setTimeout(() => {
+            tileNodes.forEach(t => { t.dom.style.display = 'flex'; });
+            pendingRemove.forEach(o => o.dom.remove());
+            spawn();
+            if (score > best) { best = score; localStorage.setItem('b2048', best); }
+            updateBoard();
+            isAnimating = false;
+        }, 130);
     }
+}
 
-    // 新生成方块的弹出效果
-    for (let t of animTiles) {
-      if (!t.merged) continue;
-      // 在最终位置再画一层合并弹跳
+// ============ 3. 交互与 AI 控制循环 ============
+function toggleAI() {
+    if (!modelReady) return;
+    aiActive = !aiActive;
+    document.getElementById('ai-btn').classList.toggle('active', aiActive);
+    if (aiActive) loop();
+}
+
+function loop() {
+    if (!aiActive) return;
+    if (!modelReady) { setTimeout(loop, 200); return; }
+    if (!isAnimating) {
+        let a = aiSelectAction(grid);
+        if (a !== -1) {
+            move(a);
+        } else {
+            aiActive = false;
+            document.getElementById('ai-btn').classList.remove('active');
+            document.getElementById('info').textContent = "GAME OVER · 最高 " + (1 << Math.max(...grid)) + " · 点击 New Game";
+            return;
+        }
     }
+    setTimeout(loop, 1000 / parseInt(document.getElementById('speed').value));
+}
 
-    if (progress < 1) {
-      requestAnimationFrame(render);
-    } else {
-      // 动画结束，更新真实 board
-      for (let t of animTiles) {
-        board[t.ex * 4 + t.ey] = t.val;
-      }
-      newTile();
-      animating = false;
-      updateScore();
-      checkGameOver();
-      render(); // 最终快照
+document.addEventListener('keydown', e => {
+    const map = { 'ArrowUp': 0, 'w': 0, 'ArrowDown': 1, 's': 1,
+                  'ArrowLeft': 2, 'a': 2, 'ArrowRight': 3, 'd': 3 };
+    if (map[e.key] !== undefined) {
+        e.preventDefault();
+        aiActive = false;
+        document.getElementById('ai-btn').classList.remove('active');
+        move(map[e.key]);
     }
-    return;
-  }  let scale = W / (CELL * 4 + GAP * 5);
-  let cell = CELL * scale;
-  let gap = GAP * scale;
-  let off = gap;
-  let radius = RADIUS * scale;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#bbada0';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  for (let i = 0; i < 16; i++) {
-    let r = Math.floor(i / 4), c = i % 4;
-    let x = off + c * (cell + gap), y = off + r * (cell + gap);
-    let v = board[i];
-    let col = TILE_COLORS[v] || TILE_COLORS[0];
-    ctx.shadowColor = 'rgba(0,0,0,0.15)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2;
-    ctx.beginPath();
-    ctx.roundRect(x, y, cell, cell, radius);
-    ctx.fillStyle = col.bg;
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    if (v > 0) {
-      let text = '' + (1 << v);
-      let fs = text.length >= 5 ? Math.floor(22 * scale) : text.length >= 4 ? Math.floor(26 * scale) : Math.floor(32 * scale);
-      if (fs < 12) fs = 12;
-      ctx.font = `bold ${fs}px 'Segoe UI', sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = col.fg;
-      ctx.fillText(text, x + cell / 2, y + cell / 2 + 2 * scale);
-    }
-  }
-  if (gameOver) {
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    let fs = Math.max(24, Math.floor(40 * scale));
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${fs}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 10 * scale);
-    ctx.font = `${Math.max(14, Math.floor(18 * scale))}px sans-serif`;
-    ctx.fillStyle = '#ddd';
-    ctx.fillText('Score: ' + score, canvas.width / 2, canvas.height / 2 + 35 * scale);
-  }
-}
-
-if (!CanvasRenderingContext2D.prototype.roundRect) {
-  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
-    this.moveTo(x + r, y);
-    this.lineTo(x + w - r, y);
-    this.quadraticCurveTo(x + w, y, x + w, y + r);
-    this.lineTo(x + w, y + h - r);
-    this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    this.lineTo(x + r, y + h);
-    this.quadraticCurveTo(x, y + h, x, y + h - r);
-    this.lineTo(x, y + r);
-    this.quadraticCurveTo(x, y, x + r, y);
-    this.closePath();
-  };
-}
-
-// ============ 4. AI 控制 ============
-let aiMode = false;
-let aiTimer = null;
-let currentSpeed = 1;
-
-async function askAI() {
-  // 前端纯本地评估
-  let a = selectMove(board, 3);
-  return a;
-}
-
-async function aiStep() {
-  if (gameOver || !aiMode) { stopAI(); return; }
-  let action = await askAI();
-  if (action >= 0) {
-    move(action);
-  } else {
-    stopAI();
-  }
-}
-
-function scheduleAI() {
-  if (!aiMode || gameOver) { stopAI(); return; }
-  let interval = 1000 / currentSpeed;
-  aiTimer = setTimeout(async () => {
-    await aiStep();
-    scheduleAI();
-  }, interval);
-}
-
-function startAI() {
-  if (gameOver) { initBoard(); stats = { games: 0, wins: 0, scores: [], maxTiles: [] }; updateStatsPanel(); }
-  aiMode = true;
-  document.getElementById('btnAI').classList.add('active');
-  document.getElementById('btnAI').textContent = '⏹ AI Playing...';
-  document.getElementById('statusBar').textContent = `🤖 AI 模式 (${currentSpeed} 步/秒) · 按方向键夺回控制`;
-  scheduleAI();
-}
-
-function stopAI() {
-  aiMode = false;
-  if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; }
-  document.getElementById('btnAI').classList.remove('active');
-  document.getElementById('btnAI').textContent = '🤖 AI Play';
-}
-
-// 触摸/点击滑动支持
-let touchStartX = 0, touchStartY = 0;
-canvas.addEventListener('touchstart', (e) => {
-  touchStartX = e.touches[0].clientX;
-  touchStartY = e.touches[0].clientY;
-}, {passive: true});
-canvas.addEventListener('touchend', (e) => {
-  let dx = e.changedTouches[0].clientX - touchStartX;
-  let dy = e.changedTouches[0].clientY - touchStartY;
-  let absDx = Math.abs(dx), absDy = Math.abs(dy);
-  if (Math.max(absDx, absDy) < 20) return;
-  if (aiMode) { stopAI(); document.getElementById('statusBar').textContent = '👤 玩家模式'; }
-  if (absDx > absDy) {
-    move(dx > 0 ? 3 : 2);
-  } else {
-    move(dy > 0 ? 1 : 0);
-  }
-}, {passive: true});
-// ============ 5. 交互控制 ============
-document.getElementById('btnNewGame').addEventListener('click', () => { stopAI(); initBoard(); });
-document.getElementById('btnAI').addEventListener('click', () => { if (aiMode) stopAI(); else startAI(); });
-
-const speedRange = document.getElementById('speedRange');
-const speedInput = document.getElementById('speedInput');
-function updateSpeed(v) {
-  v = parseFloat(v);
-  if (isNaN(v) || v <= 0) v = 1;
-  if (v > 99) v = 99;
-  currentSpeed = v;
-  speedRange.value = v;
-  speedInput.value = v;
-  if (aiMode) { clearTimeout(aiTimer); scheduleAI(); }
-}
-speedRange.addEventListener('input', () => updateSpeed(speedRange.value));
-speedInput.addEventListener('input', () => updateSpeed(speedInput.value));
-
-const KEY_MAP = { 'ArrowUp': 0, 'w': 0, 'W': 0, 'ArrowDown': 1, 's': 1, 'S': 1, 'ArrowLeft': 2, 'a': 2, 'A': 2, 'ArrowRight': 3, 'd': 3, 'D': 3 };
-document.addEventListener('keydown', (e) => {
-  let action = KEY_MAP[e.key];
-  if (action !== undefined) { e.preventDefault(); if (aiMode) { stopAI(); } move(action); }
-  if (e.key === 'n' || e.key === 'N') { stopAI(); initBoard(); }
-  if (e.key === ' ') { e.preventDefault(); document.getElementById('btnAI').click(); }
 });
 
-window.addEventListener('load', () => { resizeCanvas(); initBoard(); document.getElementById('statusBar').textContent = '🎮 方向键/WASD 操作 · [Space] 切换 AI · [N] 新游戏'; });
-window.addEventListener('resize', resizeCanvas);
+let tsX = 0, tsY = 0;
+document.addEventListener('touchstart', e => {
+    tsX = e.touches[0].clientX; tsY = e.touches[0].clientY;
+}, { passive: true });
+document.addEventListener('touchend', e => {
+    let dx = e.changedTouches[0].clientX - tsX;
+    let dy = e.changedTouches[0].clientY - tsY;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return;
+    aiActive = false;
+    document.getElementById('ai-btn').classList.remove('active');
+    if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 3 : 2);
+    else move(dy > 0 ? 1 : 0);  // 三目：dy>0 向下滑 => Down(1)
+}, { passive: true });
 
-// ============ 启动 ============
-initAI();
+newGame();
+loadModel();
 </script>
 </body>
 </html>
